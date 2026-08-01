@@ -1,0 +1,21 @@
+INSERT INTO categories (name, slug, type, sort_order) VALUES
+  ('Carpentry', 'carpentry', 'artisan', 1),
+  ('Electrical', 'electrical', 'artisan', 2),
+  ('Plumbing', 'plumbing', 'artisan', 3),
+  ('Masonry', 'masonry', 'artisan', 4),
+  ('Welding', 'welding', 'artisan', 5),
+  ('Painting', 'painting', 'artisan', 6),
+  ('POP/Plastering', 'pop-plastering', 'artisan', 7),
+  ('Tiling', 'tiling', 'artisan', 8),
+  ('Mechanics', 'mechanics', 'artisan', 9),
+  ('Interior Decoration', 'interior-decoration', 'artisan', 10),
+  ('Fashion & Tailoring', 'fashion-tailoring', 'artisan', 11),
+  ('Furniture Making', 'furniture-making', 'artisan', 12),
+  ('Web Development', 'web-development', 'freelancer', 13),
+  ('Graphic Design', 'graphic-design', 'freelancer', 14),
+  ('Digital Marketing', 'digital-marketing', 'freelancer', 15),
+  ('Writing & Editing', 'writing-editing', 'freelancer', 16),
+  ('Video & Animation', 'video-animation', 'freelancer', 17),
+  ('Virtual Assistant', 'virtual-assistant', 'freelancer', 18),
+  ('AI & Automation', 'ai-automation', 'freelancer', 19)
+ON CONFLICT (slug) DO NOTHING;
