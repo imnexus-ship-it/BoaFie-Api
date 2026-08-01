@@ -5,12 +5,17 @@ import { AppModule } from './app.module';
 import { ResponseInterceptor } from './common/interceptors/response.interceptor';
 import { AllExceptionsFilter } from './common/filters/http-exception.filter';
 
+/** Tolerates a bare host (e.g. from a platform's cross-service env var linking) as well as a full origin. */
+function normalizeOrigin(origin: string): string {
+  return origin.startsWith('http') ? origin : `https://${origin}`;
+}
+
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
   app.setGlobalPrefix('v1');
   app.enableCors({
-    origin: process.env.CORS_ORIGIN?.split(',') ?? 'http://localhost:3000',
+    origin: process.env.CORS_ORIGIN?.split(',').map(normalizeOrigin) ?? 'http://localhost:3000',
     credentials: true,
   });
 

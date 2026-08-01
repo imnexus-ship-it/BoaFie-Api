@@ -1,0 +1,61 @@
+# Render Blueprint — provisions the whole stack (API + frontend + database)
+# in one shot. Apply via Render dashboard -> New -> Blueprint, pointing at
+# this repo (github.com/imnexus-ship-it/BoaFie-Api).
+#
+# Heads up: as of writing, Render's documented plans are paid tiers only
+# (no "free" plan listed for web services or Postgres) — check current
+# pricing on the blueprint's review screen before confirming.
+
+databases:
+  - name: boafie-db
+    databaseName: boafie
+    user: boafie
+    plan: basic-256mb
+    region: oregon
+
+services:
+  - name: boafie-api
+    type: web
+    runtime: docker
+    plan: starter
+    region: oregon
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    dockerCommand: npm run start:prod
+    healthCheckPath: /v1/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: boafie-db
+          property: connectionString
+      - key: JWT_ACCESS_SECRET
+        generateValue: true
+      - key: JWT_ACCESS_EXPIRES_IN
+        value: 15m
+      - key: JWT_REFRESH_SECRET
+        generateValue: true
+      - key: JWT_REFRESH_EXPIRES_IN
+        value: 7d
+      # Render's own predictable domain for the boafie-web service below —
+      # if that service ends up on a different hostname (e.g. name
+      # collision), update this manually in the Render dashboard.
+      - key: CORS_ORIGIN
+        value: https://boafie-web.onrender.com
+
+  - name: boafie-web
+    type: web
+    runtime: node
+    plan: starter
+    region: oregon
+    repo: https://github.com/imnexus-ship-it/BoaFie-Web.git
+    branch: main
+    buildCommand: npm ci && npm run build
+    startCommand: npm run start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      # Same caveat as CORS_ORIGIN above, mirrored.
+      - key: NEXT_PUBLIC_API_URL
+        value: https://boafie-api.onrender.com/v1
