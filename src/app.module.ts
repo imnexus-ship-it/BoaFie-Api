@@ -21,6 +21,7 @@ import { WalletModule } from './modules/wallet/wallet.module';
 import { VerificationModule } from './modules/verification/verification.module';
 import { MessagingModule } from './modules/messaging/messaging.module';
 import { AdminModule } from './modules/admin/admin.module';
+import { HealthModule } from './modules/health/health.module';
 
 @Module({
   imports: [
@@ -43,6 +44,7 @@ import { AdminModule } from './modules/admin/admin.module';
     VerificationModule,
     MessagingModule,
     AdminModule,
+    HealthModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },
