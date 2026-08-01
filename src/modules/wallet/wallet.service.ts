@@ -15,6 +15,9 @@ function toTransactionDto(row: any) {
     currency: row.currency,
     description: row.description,
     created_at: row.created_at,
+    commission_rate: row.commission_rate === null ? null : Number(row.commission_rate),
+    commission_amount: row.commission_amount === null ? null : Number(row.commission_amount),
+    net_amount: row.net_amount === null ? null : Number(row.net_amount),
   };
 }
 

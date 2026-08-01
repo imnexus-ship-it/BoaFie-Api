@@ -192,7 +192,14 @@ describe('Marketplace golden path (e2e)', () => {
       .set('Authorization', `Bearer ${artisanToken}`)
       .expect(200);
     expect(txns.body.data[0]).toEqual(
-      expect.objectContaining({ type: 'escrow_release', status: 'completed', amount: 200 }),
+      expect.objectContaining({
+        type: 'escrow_release',
+        status: 'completed',
+        amount: 200, // gross milestone amount
+        commission_rate: 0.12,
+        commission_amount: 24,
+        net_amount: 176, // what the frontend should actually display as the credited amount
+      }),
     );
   });
 
