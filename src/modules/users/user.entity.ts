@@ -1,5 +1,5 @@
 export type UserRole = 'client' | 'artisan' | 'freelancer' | 'admin';
-export type AccountStatus = 'active' | 'suspended' | 'banned' | 'pending_review';
+export type AccountStatus = 'active' | 'suspended' | 'banned' | 'pending_review' | 'deleted';
 export type PlanType = 'free' | 'verified_pro' | 'business';
 
 export interface UserRow {
@@ -8,6 +8,7 @@ export interface UserRow {
   phone: string | null;
   password_hash: string | null;
   google_id: string | null;
+  yahoo_id: string | null;
   full_name: string;
   role: UserRole;
   avatar_url: string | null;

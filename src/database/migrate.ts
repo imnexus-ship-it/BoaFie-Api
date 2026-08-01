@@ -11,7 +11,11 @@ import { Pool } from 'pg';
  * are simple enough not to need one.
  */
 async function main() {
-  const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+  const databaseUrl = process.env.DATABASE_URL ?? '';
+  const pool = new Pool({
+    connectionString: databaseUrl,
+    ssl: databaseUrl.includes('sslmode=require') ? { rejectUnauthorized: false } : undefined,
+  });
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS schema_migrations (

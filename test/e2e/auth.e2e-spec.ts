@@ -109,4 +109,38 @@ describe('Auth (e2e)', () => {
     // ...and wipes every session for that user, including the one issued by the second refresh
     await request(server).post('/v1/auth/refresh').send({ refresh_token: secondRefreshToken }).expect(401);
   });
+
+  it('resets a forgotten password via the dev-stub reset link, and old credentials stop working', async () => {
+    const email = uniqueEmail('forgot');
+    await request(server)
+      .post('/v1/auth/register')
+      .send({ email, password, full_name: 'Forgot Pw', role: 'client' });
+
+    const logSpy = jest.spyOn(console, 'log').mockImplementation(() => undefined);
+    await request(server).post('/v1/auth/forgot-password').send({ email }).expect(200);
+    const logged = logSpy.mock.calls.map((c) => c.join(' ')).find((line) => line.includes('reset-password?token='));
+    logSpy.mockRestore();
+    expect(logged).toBeDefined();
+    const token = logged!.split('token=')[1].trim();
+
+    const newPassword = 'NewPassword456';
+    await request(server).post('/v1/auth/reset-password').send({ token, new_password: newPassword }).expect(200);
+
+    await request(server).post('/v1/auth/login').send({ email, password }).expect(401);
+    await request(server).post('/v1/auth/login').send({ email, password: newPassword }).expect(200);
+
+    // the reset token is single-use
+    await request(server)
+      .post('/v1/auth/reset-password')
+      .send({ token, new_password: 'AnotherPassword789' })
+      .expect(400);
+  });
+
+  it('does not reveal whether an email is registered', async () => {
+    const res = await request(server)
+      .post('/v1/auth/forgot-password')
+      .send({ email: uniqueEmail('never-registered') })
+      .expect(200);
+    expect(res.body.data.requested).toBe(true);
+  });
 });

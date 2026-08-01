@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { DatabaseService } from '../../database/database.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { UsersRepository } from './users.repository';
@@ -82,5 +82,40 @@ export class UsersService {
       active_proposals: parseInt(proposalRows[0].count, 10),
       open_contracts: parseInt(contractRows[0].count, 10),
     };
+  }
+
+  /**
+   * Soft-delete: scrubs PII and blocks login, but keeps the row (and its
+   * id) intact since contracts/transactions/reviews reference it. Blocked
+   * while the user has an open contract — deleting mid-escrow would orphan
+   * funds a counterparty is relying on.
+   */
+  async deleteMe(userId: string) {
+    const { rows } = await this.db.query<{ count: string }>(
+      `SELECT COUNT(*) FROM contracts WHERE (client_id = $1 OR worker_id = $1) AND status = 'in_progress'`,
+      [userId],
+    );
+    if (parseInt(rows[0].count, 10) > 0) {
+      throw new ConflictException('Cannot delete account while a contract is in progress. Complete or resolve it first.');
+    }
+
+    await this.db.query(
+      `UPDATE users SET
+         status = 'deleted',
+         deleted_at = NOW(),
+         email = 'deleted-' || id || '@deleted.boafie.local',
+         phone = NULL,
+         password_hash = NULL,
+         google_id = NULL,
+         full_name = 'Deleted user',
+         avatar_url = NULL,
+         bio = NULL
+       WHERE id = $1`,
+      [userId],
+    );
+    await this.db.query('DELETE FROM refresh_tokens WHERE user_id = $1', [userId]);
+    await this.db.query('DELETE FROM password_reset_tokens WHERE user_id = $1', [userId]);
+
+    return { deleted: true };
   }
 }

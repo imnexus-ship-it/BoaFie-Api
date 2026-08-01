@@ -30,6 +30,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     if (!user) throw new UnauthorizedException('User not found');
     if (user.status === 'banned') throw new UnauthorizedException('Account banned');
     if (user.status === 'suspended') throw new UnauthorizedException('Account suspended');
+    if (user.status === 'deleted') throw new UnauthorizedException('Account deleted');
 
     const updatedTs = Math.floor(new Date(user.updated_at).getTime() / 1000);
     if (payload.iat < updatedTs) {

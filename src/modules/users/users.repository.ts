@@ -16,4 +16,12 @@ export class UsersRepository extends BaseRepository<UserRow> {
   findByPhone(phone: string) {
     return this.findOne({ phone });
   }
+
+  findByGoogleId(googleId: string) {
+    return this.findOne({ google_id: googleId });
+  }
+
+  findByYahooId(yahooId: string) {
+    return this.findOne({ yahoo_id: yahooId });
+  }
 }

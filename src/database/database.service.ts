@@ -13,7 +13,14 @@ export class DatabaseService implements OnModuleDestroy {
   readonly pool: Pool;
 
   constructor(@Inject(databaseConfig.KEY) config: ConfigType<typeof databaseConfig>) {
-    this.pool = new Pool({ connectionString: config.url });
+    this.pool = new Pool({
+      connectionString: config.url,
+      // Neon (and most managed Postgres) requires SSL; pg's own parsing of
+      // `sslmode=require` from the connection string isn't reliable enough
+      // to depend on, so set it explicitly. Local dev URLs have no
+      // sslmode param and are left alone.
+      ssl: config.url.includes('sslmode=require') ? { rejectUnauthorized: false } : undefined,
+    });
   }
 
   query<T extends QueryResultRow = QueryResultRow>(text: string, params?: unknown[]) {

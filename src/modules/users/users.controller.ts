@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Query } from '@nestjs/common';
 import { CurrentUser, RequestUser } from '../../common/decorators/current-user.decorator';
 import { Public } from '../../common/decorators/public.decorator';
 import { PaginationQueryDto } from '../../common/dto/pagination.dto';
@@ -21,6 +21,12 @@ export class UsersController {
   @Patch('me')
   updateMe(@CurrentUser() user: RequestUser, @Body() dto: UpdateUserDto) {
     return this.usersService.updateMe(user.id, dto);
+  }
+
+  @Delete('me')
+  @HttpCode(200)
+  deleteMe(@CurrentUser() user: RequestUser) {
+    return this.usersService.deleteMe(user.id);
   }
 
   @Get('me/dashboard')
