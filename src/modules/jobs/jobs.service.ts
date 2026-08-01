@@ -30,35 +30,35 @@ export class JobsService {
   async search(query: SearchJobsDto) {
     const page = query.page ?? 1;
     const limit = query.limit ?? 20;
-    const conditions: string[] = [`status = 'open'`, `is_flagged = FALSE`];
+    const conditions: string[] = [`jobs.status = 'open'`, `jobs.is_flagged = FALSE`];
     const params: unknown[] = [];
 
     if (query.category) {
       params.push(query.category);
-      conditions.push(`category = $${params.length}`);
+      conditions.push(`jobs.category = $${params.length}`);
     }
     if (query.location) {
       params.push(`%${query.location}%`);
-      conditions.push(`location_text ILIKE $${params.length}`);
+      conditions.push(`jobs.location_text ILIKE $${params.length}`);
     }
     if (query.budget_min !== undefined) {
       params.push(query.budget_min);
-      conditions.push(`budget_max_ghs >= $${params.length}`);
+      conditions.push(`jobs.budget_max_ghs >= $${params.length}`);
     }
     if (query.budget_max !== undefined) {
       params.push(query.budget_max);
-      conditions.push(`budget_min_ghs <= $${params.length}`);
+      conditions.push(`jobs.budget_min_ghs <= $${params.length}`);
     }
     if (query.diaspora !== undefined) {
       params.push(query.diaspora);
-      conditions.push(`is_diaspora_job = $${params.length}`);
+      conditions.push(`jobs.is_diaspora_job = $${params.length}`);
     }
     if (query.urgency) {
       params.push(query.urgency);
-      conditions.push(`urgency = $${params.length}`);
+      conditions.push(`jobs.urgency = $${params.length}`);
     }
 
-    const order = query.sort === 'budget' ? 'budget_max_ghs DESC NULLS LAST' : 'created_at DESC';
+    const order = query.sort === 'budget' ? 'jobs.budget_max_ghs DESC NULLS LAST' : 'jobs.created_at DESC';
     const where = `WHERE ${conditions.join(' AND ')}`;
 
     const { rows: countRows } = await this.db.query<{ count: string }>(
@@ -112,10 +112,10 @@ export class JobsService {
     }
 
     const params: unknown[] = [];
-    let where = `WHERE status = 'open' AND is_flagged = FALSE`;
+    let where = `WHERE jobs.status = 'open' AND jobs.is_flagged = FALSE`;
     if (category) {
       params.push(category);
-      where += ` AND category = $${params.length}`;
+      where += ` AND jobs.category = $${params.length}`;
     }
     params.push(10);
     const { rows } = await this.db.query<JobRow & { client: unknown }>(
