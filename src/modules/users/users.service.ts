@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { DatabaseService } from '../../database/database.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { UsersRepository } from './users.repository';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { toPublicUser } from './user.entity';
@@ -9,6 +10,7 @@ export class UsersService {
   constructor(
     private readonly users: UsersRepository,
     private readonly db: DatabaseService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   async getMe(userId: string) {
@@ -48,7 +50,8 @@ export class UsersService {
         }
       : null;
 
-    const base = { role, unread_notifications: 0, wallet };
+    const unreadNotifications = await this.notifications.countUnread(userId);
+    const base = { role, unread_notifications: unreadNotifications, wallet };
 
     if (role === 'client') {
       const { rows } = await this.db.query<{ count: string }>(

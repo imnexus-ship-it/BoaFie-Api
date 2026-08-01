@@ -9,6 +9,7 @@ import { DatabaseService } from '../../database/database.service';
 import { ProposalsRepository } from './proposals.repository';
 import { JobsRepository } from '../jobs/jobs.repository';
 import { MessagingService } from '../messaging/messaging.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { CreateProposalDto } from './dto/create-proposal.dto';
 import { ProposalRow, toProposalDto } from './proposal.entity';
 
@@ -29,6 +30,7 @@ export class ProposalsService {
     private readonly jobs: JobsRepository,
     private readonly db: DatabaseService,
     private readonly messaging: MessagingService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   private rowToDto(row: ProposalRow & { job: unknown; worker: unknown }) {
@@ -73,6 +75,13 @@ export class ProposalsService {
       estimated_days: dto.estimated_days ?? null,
     });
     await this.jobs.incrementProposalCount(jobId);
+    await this.notifications.notify(
+      job.client_id,
+      'proposal',
+      'New proposal received',
+      `You have a new proposal on "${job.title}"`,
+      { job_id: jobId, proposal_id: proposal.id },
+    );
 
     const { rows } = await this.db.query<ProposalRow & { job: unknown; worker: unknown }>(
       `${JOB_WORKER_JOIN} WHERE proposals.id = $1`,
@@ -89,6 +98,13 @@ export class ProposalsService {
     if (proposal.status !== 'pending') throw new BadRequestException('Proposal already processed');
 
     await this.proposals.updateById(proposalId, { status: 'rejected' });
+    await this.notifications.notify(
+      proposal.worker_id,
+      'proposal',
+      'Proposal declined',
+      `Your proposal for "${job.title}" was declined.`,
+      { job_id: job.id, proposal_id: proposalId },
+    );
     const { rows } = await this.db.query<ProposalRow & { job: unknown; worker: unknown }>(
       `${JOB_WORKER_JOIN} WHERE proposals.id = $1`,
       [proposalId],
@@ -160,6 +176,13 @@ export class ProposalsService {
     });
 
     await this.messaging.createForContract(clientId, proposal.worker_id, proposal.job_id, contract.id);
+    await this.notifications.notify(
+      proposal.worker_id,
+      'proposal',
+      'Proposal accepted',
+      `Your proposal for "${job.title}" was accepted — a contract has been created.`,
+      { job_id: job.id, proposal_id: proposalId, contract_id: contract.id },
+    );
 
     return {
       proposal_id: proposalId,

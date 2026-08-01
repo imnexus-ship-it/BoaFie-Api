@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { DatabaseService } from '../../database/database.service';
 import { offsetFor } from '../../common/dto/pagination.dto';
+import { NotificationsService } from '../notifications/notifications.service';
 import { SubmitIdDto, SubmitLocationDto } from './dto/verification.dto';
 
 const TRUST_SCORE_THRESHOLD = 80;
@@ -25,7 +26,10 @@ function toVerificationDto(row: any, phoneVerified: boolean) {
 
 @Injectable()
 export class VerificationService {
-  constructor(private readonly db: DatabaseService) {}
+  constructor(
+    private readonly db: DatabaseService,
+    private readonly notifications: NotificationsService,
+  ) {}
 
   private async getRow(userId: string) {
     const { rows } = await this.db.query('SELECT * FROM verifications WHERE user_id = $1', [userId]);
@@ -195,6 +199,13 @@ export class VerificationService {
         [adminId, action, verificationId],
       );
     }
+    await this.notifications.notify(
+      row.user_id,
+      'verification',
+      'Verification approved',
+      'One or more of your verification steps were approved.',
+      { verification_id: verificationId },
+    );
     return this.recomputeTrustScore(row.user_id);
   }
 
@@ -218,6 +229,13 @@ export class VerificationService {
     await this.db.query(
       `INSERT INTO admin_audit_log (admin_id, action, target_type, target_id, details) VALUES ($1, 'verify_rejected', 'verification', $2, $3)`,
       [adminId, verificationId, JSON.stringify({ reason })],
+    );
+    await this.notifications.notify(
+      row.user_id,
+      'verification',
+      'Verification rejected',
+      `A verification step was rejected: ${reason}`,
+      { verification_id: verificationId },
     );
     return this.getStatus(row.user_id);
   }

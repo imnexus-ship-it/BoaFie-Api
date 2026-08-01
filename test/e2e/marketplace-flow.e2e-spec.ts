@@ -203,6 +203,54 @@ describe('Marketplace golden path (e2e)', () => {
     );
   });
 
+  it('real notifications were created along the way, and the unread count is accurate', async () => {
+    // artisan: notified on "proposal accepted" and "milestone approved"
+    const artisanDashboard = await request(server)
+      .get('/v1/users/me/dashboard')
+      .set('Authorization', `Bearer ${artisanToken}`)
+      .expect(200);
+    expect(artisanDashboard.body.data.unread_notifications).toBe(2);
+
+    const artisanNotifications = await request(server)
+      .get('/v1/users/me/notifications')
+      .set('Authorization', `Bearer ${artisanToken}`)
+      .expect(200);
+    const titles = artisanNotifications.body.data.map((n: any) => n.title);
+    expect(titles).toEqual(expect.arrayContaining(['Proposal accepted', 'Milestone approved — funds released']));
+    expect(artisanNotifications.body.data.every((n: any) => n.is_read === false)).toBe(true);
+
+    // client: notified on "new proposal received" (initial submission) and
+    // "milestone submitted for review"
+    const clientDashboard = await request(server)
+      .get('/v1/users/me/dashboard')
+      .set('Authorization', `Bearer ${clientToken}`)
+      .expect(200);
+    expect(clientDashboard.body.data.unread_notifications).toBe(2);
+
+    // marking one read drops the count by exactly one
+    const notificationId = artisanNotifications.body.data[0].id;
+    await request(server)
+      .patch(`/v1/users/me/notifications/${notificationId}/read`)
+      .set('Authorization', `Bearer ${artisanToken}`)
+      .expect(200);
+    const afterOneRead = await request(server)
+      .get('/v1/users/me/dashboard')
+      .set('Authorization', `Bearer ${artisanToken}`)
+      .expect(200);
+    expect(afterOneRead.body.data.unread_notifications).toBe(1);
+
+    // mark-all-read zeroes it out
+    await request(server)
+      .patch('/v1/users/me/notifications/read-all')
+      .set('Authorization', `Bearer ${artisanToken}`)
+      .expect(200);
+    const afterAllRead = await request(server)
+      .get('/v1/users/me/dashboard')
+      .set('Authorization', `Bearer ${artisanToken}`)
+      .expect(200);
+    expect(afterAllRead.body.data.unread_notifications).toBe(0);
+  });
+
   it('the milestone cannot be approved twice', async () => {
     await request(server)
       .patch(`/v1/milestones/${milestoneId}/approve`)

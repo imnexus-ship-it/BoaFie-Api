@@ -1,6 +1,7 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { DatabaseService } from '../../database/database.service';
 import { CommissionService } from './commission.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { CreateMilestoneDto } from './dto/create-milestone.dto';
 
 function toMilestoneDto(row: any) {
@@ -23,6 +24,7 @@ export class MilestonesService {
   constructor(
     private readonly db: DatabaseService,
     private readonly commission: CommissionService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   private async getContractForMilestone(milestoneId: string) {
@@ -90,6 +92,13 @@ export class MilestonesService {
       `UPDATE milestones SET status = 'submitted', submission_note = $2 WHERE id = $1 RETURNING *`,
       [milestoneId, note],
     );
+    await this.notifications.notify(
+      m.client_id,
+      'milestone',
+      'Milestone submitted for review',
+      `"${m.title}" was submitted and is awaiting your approval.`,
+      { contract_id: m.contract_id, milestone_id: milestoneId },
+    );
     return toMilestoneDto(rows[0]);
   }
 
@@ -109,6 +118,13 @@ export class MilestonesService {
     const { rows } = await this.db.query(
       `UPDATE milestones SET status = 'in_progress', submission_note = $2 WHERE id = $1 RETURNING *`,
       [milestoneId, `Changes requested: ${feedback}`],
+    );
+    await this.notifications.notify(
+      m.worker_id,
+      'milestone',
+      'Changes requested on your milestone',
+      `The client asked for changes on "${m.title}": ${feedback}`,
+      { contract_id: m.contract_id, milestone_id: milestoneId },
     );
     return toMilestoneDto(rows[0]);
   }
@@ -185,6 +201,14 @@ export class MilestonesService {
 
       return milestoneRows[0];
     });
+
+    await this.notifications.notify(
+      m.worker_id,
+      'milestone',
+      'Milestone approved — funds released',
+      `"${m.title}" was approved. GHS ${netAmount.toFixed(2)} was credited to your wallet after commission.`,
+      { contract_id: m.contract_id, milestone_id: milestoneId, net_amount: netAmount },
+    );
 
     return toMilestoneDto(updated);
   }
