@@ -20,4 +20,8 @@ export class CreateFreelancerProfileDto {
   @IsOptional()
   @IsString()
   location_text?: string;
+
+  @IsOptional()
+  @IsString()
+  ai_bio?: string;
 }

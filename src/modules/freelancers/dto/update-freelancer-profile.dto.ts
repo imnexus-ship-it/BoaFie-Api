@@ -21,4 +21,8 @@ export class UpdateFreelancerProfileDto {
   @IsOptional()
   @IsString()
   location_text?: string;
+
+  @IsOptional()
+  @IsString()
+  ai_bio?: string;
 }

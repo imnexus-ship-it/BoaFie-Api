@@ -28,4 +28,8 @@ export class CreateArtisanProfileDto {
   @IsOptional()
   @IsNumber()
   lng?: number;
+
+  @IsOptional()
+  @IsString()
+  ai_bio?: string;
 }

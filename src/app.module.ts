@@ -23,6 +23,8 @@ import { VerificationModule } from './modules/verification/verification.module';
 import { MessagingModule } from './modules/messaging/messaging.module';
 import { AdminModule } from './modules/admin/admin.module';
 import { HealthModule } from './modules/health/health.module';
+import { AiModule } from './modules/ai/ai.module';
+import { MatchingModule } from './modules/matching/matching.module';
 
 @Module({
   imports: [
@@ -46,6 +48,8 @@ import { HealthModule } from './modules/health/health.module';
     MessagingModule,
     AdminModule,
     HealthModule,
+    AiModule,
+    MatchingModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },

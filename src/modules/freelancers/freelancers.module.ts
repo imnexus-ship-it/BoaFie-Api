@@ -6,5 +6,6 @@ import { FreelancersRepository } from './freelancers.repository';
 @Module({
   controllers: [FreelancersController],
   providers: [FreelancersService, FreelancersRepository],
+  exports: [FreelancersRepository],
 })
 export class FreelancersModule {}

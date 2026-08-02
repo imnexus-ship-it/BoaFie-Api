@@ -6,5 +6,6 @@ import { ArtisansRepository } from './artisans.repository';
 @Module({
   controllers: [ArtisansController],
   providers: [ArtisansService, ArtisansRepository],
+  exports: [ArtisansRepository],
 })
 export class ArtisansModule {}

@@ -6,6 +6,7 @@ import { CreateJobDto } from './dto/create-job.dto';
 import { UpdateJobDto } from './dto/update-job.dto';
 import { SearchJobsDto } from './dto/search-jobs.dto';
 import { offsetFor } from '../../common/dto/pagination.dto';
+import { scoreMatch, overlapCount } from '../../common/matching/score';
 import { JobRow, toJobDto } from './job.entity';
 
 const CLIENT_JOIN = `
@@ -95,34 +96,90 @@ export class JobsService {
     return { items: rows.map((r) => this.rowToDto(r)), meta: { page, limit, total } };
   }
 
+  /**
+   * "Matched for you" — scores the open-jobs pool against the worker's own
+   * profile (category/skill overlap, location, rate fit, urgency) instead
+   * of the old exact-category-only filter. Falls back to plain recency
+   * when nothing scores above zero (e.g. a brand-new worker with no
+   * skills set yet), so the section is never empty once there's any open
+   * work at all.
+   */
   async recommended(userId: string, role: string) {
-    let category: string | null = null;
     if (role === 'artisan') {
-      const { rows } = await this.db.query<{ trade_category: string }>(
-        'SELECT trade_category FROM artisan_profiles WHERE user_id = $1',
-        [userId],
-      );
-      category = rows[0]?.trade_category ?? null;
-    } else if (role === 'freelancer') {
-      const { rows } = await this.db.query<{ skills: string[] }>(
-        'SELECT skills FROM freelancer_profiles WHERE user_id = $1',
-        [userId],
-      );
-      category = rows[0]?.skills?.[0] ?? null;
+      const { rows } = await this.db.query<{
+        trade_category: string;
+        trade_subcategories: string[];
+        hourly_rate_ghs: string | null;
+      }>('SELECT trade_category, trade_subcategories, hourly_rate_ghs FROM artisan_profiles WHERE user_id = $1', [
+        userId,
+      ]);
+      const profile = rows[0];
+      if (!profile) return [];
+      return this.scoredOpenJobsFor({
+        categorySlug: profile.trade_category,
+        skills: profile.trade_subcategories ?? [],
+        hourlyRateGhs: profile.hourly_rate_ghs,
+        isRemoteWorker: false,
+      });
     }
+    if (role === 'freelancer') {
+      const { rows } = await this.db.query<{
+        skills: string[];
+        hourly_rate_ghs: string | null;
+        remote_only: boolean;
+      }>('SELECT skills, hourly_rate_ghs, remote_only FROM freelancer_profiles WHERE user_id = $1', [userId]);
+      const profile = rows[0];
+      if (!profile) return [];
+      return this.scoredOpenJobsFor({
+        categorySlug: null,
+        skills: profile.skills ?? [],
+        hourlyRateGhs: profile.hourly_rate_ghs,
+        isRemoteWorker: profile.remote_only,
+      });
+    }
+    return [];
+  }
 
-    const params: unknown[] = [];
-    let where = `WHERE jobs.status = 'open' AND jobs.is_flagged = FALSE`;
-    if (category) {
-      params.push(category);
-      where += ` AND jobs.category = $${params.length}`;
-    }
-    params.push(10);
+  private async scoredOpenJobsFor(worker: {
+    categorySlug: string | null;
+    skills: string[];
+    hourlyRateGhs: string | null;
+    isRemoteWorker: boolean;
+  }) {
     const { rows } = await this.db.query<JobRow & { client: unknown }>(
-      `${CLIENT_JOIN} ${where} ORDER BY jobs.created_at DESC LIMIT $${params.length}`,
-      params,
+      `${CLIENT_JOIN} WHERE jobs.status = 'open' AND jobs.is_flagged = FALSE ORDER BY jobs.created_at DESC LIMIT 50`,
     );
-    return rows.map((r) => this.rowToDto(r));
+
+    const scored = rows.map((row) => {
+      let rateFit: 'good' | 'neutral' | 'none' = 'neutral';
+      if (
+        row.budget_type === 'hourly' &&
+        worker.hourlyRateGhs !== null &&
+        row.budget_min_ghs !== null &&
+        row.budget_max_ghs !== null
+      ) {
+        const rate = Number(worker.hourlyRateGhs);
+        const min = Number(row.budget_min_ghs) * 0.7;
+        const max = Number(row.budget_max_ghs) * 1.3;
+        rateFit = rate >= min && rate <= max ? 'good' : 'none';
+      }
+      const score = scoreMatch({
+        categoryExactMatch: worker.categorySlug !== null && row.category === worker.categorySlug,
+        skillOverlapCount: overlapCount(worker.skills, row.skills_required),
+        locationMatch: row.is_remote ? worker.isRemoteWorker : false,
+        rateFit,
+        urgentJob: row.urgency === 'emergency',
+        workerAvailable: true,
+        trackRecord: 0,
+      });
+      return { row, score };
+    });
+
+    const ranked = scored
+      .filter((s) => s.score > 0)
+      .sort((a, b) => b.score - a.score || +new Date(b.row.created_at) - +new Date(a.row.created_at));
+    const chosen = ranked.length > 0 ? ranked : scored;
+    return chosen.slice(0, 10).map((s) => this.rowToDto(s.row));
   }
 
   async create(clientId: string, dto: CreateJobDto) {
