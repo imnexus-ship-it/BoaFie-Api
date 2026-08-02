@@ -10,5 +10,6 @@ import { CommissionService } from './commission.service';
   imports: [NotificationsModule],
   controllers: [ContractsController, MilestonesController],
   providers: [ContractsService, MilestonesService, CommissionService],
+  exports: [CommissionService],
 })
 export class ContractsModule {}

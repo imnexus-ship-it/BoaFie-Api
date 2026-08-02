@@ -2,11 +2,17 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { DatabaseService } from '../../database/database.service';
 import { offsetFor } from '../../common/dto/pagination.dto';
 import { toPublicUser } from '../users/user.entity';
+import { CommissionService } from '../contracts/commission.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { SuspendUserDto, ResolveDisputeDto } from './dto/admin-actions.dto';
 
 @Injectable()
 export class AdminService {
-  constructor(private readonly db: DatabaseService) {}
+  constructor(
+    private readonly db: DatabaseService,
+    private readonly commission: CommissionService,
+    private readonly notifications: NotificationsService,
+  ) {}
 
   async stats() {
     const q = (sql: string) => this.db.query<{ count: string }>(sql).then((r) => parseInt(r.rows[0].count, 10));
@@ -102,6 +108,21 @@ export class AdminService {
     return this.setUserStatus(userId, 'active', adminId);
   }
 
+  async promoteToAdmin(userId: string, adminId: string) {
+    const { rows } = await this.db.query<{ id: string; role: string }>('SELECT id, role FROM users WHERE id = $1', [
+      userId,
+    ]);
+    if (!rows[0]) throw new NotFoundException('User not found');
+    if (rows[0].role === 'admin') throw new BadRequestException('User is already an admin');
+
+    await this.db.query('UPDATE users SET role = $2 WHERE id = $1', [userId, 'admin']);
+    await this.db.query(
+      `INSERT INTO admin_audit_log (admin_id, action, target_type, target_id) VALUES ($1, 'user_promoted_admin', 'user', $2)`,
+      [adminId, userId],
+    );
+    return { id: userId, role: 'admin' };
+  }
+
   async listJobs(page = 1, limit = 20, status?: string, flagged?: boolean) {
     const conditions: string[] = [];
     const params: unknown[] = [];
@@ -192,28 +213,136 @@ export class AdminService {
     const { rows: countRows } = await this.db.query<{ count: string }>('SELECT COUNT(*) FROM disputes');
     const total = parseInt(countRows[0].count, 10);
     const { rows } = await this.db.query(
-      `SELECT d.*, jsonb_build_object('id', c.id, 'title', c.title) AS contract
-       FROM disputes d JOIN contracts c ON c.id = d.contract_id
+      `SELECT d.*, jsonb_build_object('id', c.id, 'title', c.title) AS contract,
+         jsonb_build_object('id', ru.id, 'full_name', ru.full_name) AS raised_by_user,
+         jsonb_build_object('id', au.id, 'full_name', au.full_name) AS against_user_user
+       FROM disputes d
+       JOIN contracts c ON c.id = d.contract_id
+       JOIN users ru ON ru.id = d.raised_by
+       JOIN users au ON au.id = d.against_user
        ORDER BY d.created_at DESC LIMIT $1 OFFSET $2`,
       [limit, offsetFor(page, limit)],
     );
     return { items: rows, meta: { page, limit, total } };
   }
 
+  /**
+   * Releasing/refunding here moves the contract's remaining held escrow
+   * for real — same accounting the milestone approval flow uses
+   * (MilestonesService.approve). It's the same "money" the rest of the
+   * app already treats as real the instant a contract is created (see
+   * ProposalsService.accept), so this stays consistent with that even
+   * though no actual payment gateway sits behind any of it yet.
+   */
+  private async settleDisputeEscrow(contractId: string, outcome: 'resolved_client' | 'resolved_worker', adminId: string) {
+    return this.db.withTransaction(async (client) => {
+      const { rows: escrowRows } = await client.query(
+        'SELECT * FROM escrow_accounts WHERE contract_id = $1 FOR UPDATE',
+        [contractId],
+      );
+      const escrow = escrowRows[0];
+      const heldAmount = escrow ? Number(escrow.held_amount) : 0;
+      if (!escrow || heldAmount <= 0) return null;
+
+      const { rows: contractRows } = await client.query(
+        'SELECT client_id, worker_id FROM contracts WHERE id = $1',
+        [contractId],
+      );
+      const contract = contractRows[0];
+
+      if (outcome === 'resolved_worker') {
+        const { commissionRate, commissionAmount, netAmount } = await this.commission.calculate(
+          contract.worker_id,
+          heldAmount,
+        );
+        await client.query(
+          `UPDATE escrow_accounts SET held_amount = 0, released_amount = released_amount + $2, status = 'released' WHERE id = $1`,
+          [escrow.id, heldAmount],
+        );
+        await client.query(
+          `INSERT INTO escrow_releases (escrow_id, amount, released_by, note) VALUES ($1, $2, $3, $4)`,
+          [escrow.id, heldAmount, adminId, 'Released via dispute resolution'],
+        );
+        const { rows: walletRows } = await client.query('SELECT id FROM wallets WHERE user_id = $1', [
+          contract.worker_id,
+        ]);
+        await client.query(
+          `INSERT INTO transactions
+             (user_id, wallet_id, type, status, amount, currency, contract_id, escrow_id, commission_rate, commission_amount, net_amount, description)
+           VALUES ($1, $2, 'escrow_release', 'completed', $3, 'GHS', $4, $5, $6, $7, $8, $9)`,
+          [
+            contract.worker_id,
+            walletRows[0].id,
+            heldAmount,
+            contractId,
+            escrow.id,
+            commissionRate,
+            commissionAmount,
+            netAmount,
+            'Dispute resolved in your favor',
+          ],
+        );
+        await client.query(
+          `UPDATE wallets SET balance_ghs = balance_ghs + $2, lifetime_earned = lifetime_earned + $2,
+             last_escrow_credit_at = NOW() WHERE user_id = $1`,
+          [contract.worker_id, netAmount],
+        );
+        return { released_to: contract.worker_id, amount: netAmount };
+      }
+
+      // resolved_client: refund the remaining held amount, no commission deducted.
+      await client.query(
+        `UPDATE escrow_accounts SET held_amount = 0, refunded_amount = refunded_amount + $2, status = 'refunded' WHERE id = $1`,
+        [escrow.id, heldAmount],
+      );
+      const { rows: walletRows } = await client.query('SELECT id FROM wallets WHERE user_id = $1', [
+        contract.client_id,
+      ]);
+      await client.query(
+        `INSERT INTO transactions (user_id, wallet_id, type, status, amount, currency, contract_id, escrow_id, description)
+         VALUES ($1, $2, 'refund', 'completed', $3, 'GHS', $4, $5, $6)`,
+        [contract.client_id, walletRows[0].id, heldAmount, contractId, escrow.id, 'Dispute resolved in your favor — escrow refunded'],
+      );
+      await client.query(`UPDATE wallets SET balance_ghs = balance_ghs + $2 WHERE user_id = $1`, [
+        contract.client_id,
+        heldAmount,
+      ]);
+      return { released_to: contract.client_id, amount: heldAmount };
+    });
+  }
+
   async resolveDispute(disputeId: string, adminId: string, dto: ResolveDisputeDto) {
-    const { rows } = await this.db.query('SELECT id FROM disputes WHERE id = $1', [disputeId]);
-    if (!rows[0]) throw new NotFoundException('Dispute not found');
-    if (!['open', 'under_review', 'escalated'].includes(rows[0].status)) {
+    const { rows } = await this.db.query('SELECT * FROM disputes WHERE id = $1', [disputeId]);
+    const dispute = rows[0];
+    if (!dispute) throw new NotFoundException('Dispute not found');
+    if (!['open', 'under_review', 'escalated'].includes(dispute.status)) {
       throw new BadRequestException('Dispute already resolved');
     }
+
+    const escrowOutcome =
+      dto.outcome === 'resolved_client' || dto.outcome === 'resolved_worker'
+        ? await this.settleDisputeEscrow(dispute.contract_id, dto.outcome, adminId)
+        : null;
+
     await this.db.query(
       `UPDATE disputes SET status = $2, resolution_note = $3, resolved_by = $4, resolved_at = NOW() WHERE id = $1`,
       [disputeId, dto.outcome, dto.resolution_note, adminId],
     );
     await this.db.query(
       `INSERT INTO admin_audit_log (admin_id, action, target_type, target_id, details) VALUES ($1, 'dispute_resolved', 'dispute', $2, $3)`,
-      [adminId, disputeId, JSON.stringify({ outcome: dto.outcome })],
+      [adminId, disputeId, JSON.stringify({ outcome: dto.outcome, escrow: escrowOutcome })],
     );
-    return { id: disputeId, status: dto.outcome };
+
+    if (escrowOutcome) {
+      await this.notifications.notify(
+        escrowOutcome.released_to,
+        'payment',
+        dto.outcome === 'resolved_worker' ? 'Dispute resolved — funds released' : 'Dispute resolved — escrow refunded',
+        `GHS ${escrowOutcome.amount.toFixed(2)} was credited to your wallet. ${dto.resolution_note}`,
+        { dispute_id: disputeId, amount: escrowOutcome.amount },
+      );
+    }
+
+    return { id: disputeId, status: dto.outcome, escrow: escrowOutcome };
   }
 }

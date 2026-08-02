@@ -39,6 +39,11 @@ export class AdminController {
     return this.adminService.reinstateUser(id, admin.id);
   }
 
+  @Patch('users/:id/promote')
+  promoteToAdmin(@CurrentUser() admin: RequestUser, @Param('id') id: string) {
+    return this.adminService.promoteToAdmin(id, admin.id);
+  }
+
   @Get('verifications')
   verificationQueue(@Query() query: AdminPageQueryDto) {
     return this.verificationService.adminQueue(query.page, 20);

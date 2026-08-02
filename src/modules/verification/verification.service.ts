@@ -24,6 +24,19 @@ function toVerificationDto(row: any, phoneVerified: boolean) {
   };
 }
 
+/** Admin review needs the actual submitted documents, not just their status. */
+function toAdminVerificationDto(row: any) {
+  return {
+    ...toVerificationDto(row, false),
+    id_type: row.id_type,
+    id_number: row.id_number,
+    id_front_url: row.id_front_url,
+    id_back_url: row.id_back_url,
+    selfie_url: row.selfie_url,
+    trade_cert_url: row.trade_cert_url,
+  };
+}
+
 @Injectable()
 export class VerificationService {
   constructor(
@@ -159,7 +172,7 @@ export class VerificationService {
       [limit, offsetFor(page, limit)],
     );
     return {
-      items: rows.map((r) => ({ ...toVerificationDto(r, false), users: r.users })),
+      items: rows.map((r) => ({ ...toAdminVerificationDto(r), users: r.users })),
       meta: { page, limit, total },
     };
   }
