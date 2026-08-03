@@ -20,6 +20,14 @@ export interface UserRow {
   email_verified: boolean;
   diaspora_mode: boolean;
   country_of_residence: string | null;
+  region: string | null;
+  city: string | null;
+  date_of_birth: string | null;
+  gender: string | null;
+  referral_code: string | null;
+  marketing_opt_in: boolean;
+  terms_accepted_at: string | null;
+  preferred_contact_method: string | null;
   preferred_currency: string;
   preferred_language: string;
   last_active_at: string | null;

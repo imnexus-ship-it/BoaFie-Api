@@ -1,4 +1,4 @@
-import { IsEmail, IsIn, IsOptional, IsStrongPassword, IsString, MinLength } from 'class-validator';
+import { IsBoolean, IsDateString, IsEmail, IsIn, IsOptional, IsStrongPassword, IsString, MinLength } from 'class-validator';
 
 export class RegisterDto {
   @IsEmail()
@@ -23,4 +23,40 @@ export class RegisterDto {
   @IsOptional()
   @IsString()
   phone?: string;
+
+  @IsOptional()
+  @IsString()
+  country_of_residence?: string;
+
+  @IsOptional()
+  @IsString()
+  region?: string;
+
+  @IsOptional()
+  @IsString()
+  city?: string;
+
+  @IsOptional()
+  @IsDateString()
+  date_of_birth?: string;
+
+  @IsOptional()
+  @IsString()
+  gender?: string;
+
+  @IsOptional()
+  @IsString()
+  referral_code?: string;
+
+  @IsOptional()
+  @IsString()
+  preferred_contact_method?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  marketing_opt_in?: boolean;
+
+  /** Gate, not data — the signup UI requires this box checked before submit is even reachable. */
+  @IsIn([true])
+  accepted_terms: true;
 }

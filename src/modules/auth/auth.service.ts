@@ -81,6 +81,10 @@ export class AuthService {
       if (existingPhone) throw new ConflictException('Phone number already registered');
     }
 
+    if (dto.date_of_birth && this.age(dto.date_of_birth) < 18) {
+      throw new BadRequestException('You must be at least 18 years old to join BoaFie');
+    }
+
     const passwordHash = await bcrypt.hash(dto.password, 10);
     const user = await this.users.insert({
       email: dto.email,
@@ -88,11 +92,29 @@ export class AuthService {
       full_name: dto.full_name,
       role: dto.role,
       phone: dto.phone ?? null,
+      country_of_residence: dto.country_of_residence ?? null,
+      region: dto.region ?? null,
+      city: dto.city ?? null,
+      date_of_birth: dto.date_of_birth ?? null,
+      gender: dto.gender ?? null,
+      referral_code: dto.referral_code ?? null,
+      preferred_contact_method: dto.preferred_contact_method ?? null,
+      marketing_opt_in: dto.marketing_opt_in ?? false,
+      terms_accepted_at: new Date(),
     });
     await this.db.query('INSERT INTO wallets (user_id) VALUES ($1)', [user.id]);
     await this.db.query('INSERT INTO verifications (user_id) VALUES ($1)', [user.id]);
 
     return this.issueTokens(user);
+  }
+
+  private age(dateOfBirth: string): number {
+    const dob = new Date(dateOfBirth);
+    const now = new Date();
+    let years = now.getFullYear() - dob.getFullYear();
+    const monthDiff = now.getMonth() - dob.getMonth();
+    if (monthDiff < 0 || (monthDiff === 0 && now.getDate() < dob.getDate())) years--;
+    return years;
   }
 
   async login(dto: LoginDto) {

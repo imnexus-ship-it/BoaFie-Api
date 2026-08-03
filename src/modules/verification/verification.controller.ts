@@ -8,6 +8,7 @@ import {
   SubmitTradeCertDto,
   SendPhoneOtpDto,
   ConfirmPhoneOtpDto,
+  ConfirmEmailCodeDto,
 } from './dto/verification.dto';
 
 @Controller('verification')
@@ -28,6 +29,17 @@ export class VerificationController {
   @Post('phone/confirm')
   confirmPhoneOtp(@CurrentUser() user: RequestUser, @Body() dto: ConfirmPhoneOtpDto) {
     return this.verificationService.confirmPhoneOtp(user.id, dto.phone, dto.code);
+  }
+
+  @Post('email/send')
+  async sendEmailCode(@CurrentUser() user: RequestUser) {
+    await this.verificationService.sendEmailCode(user.id);
+    return { sent: true };
+  }
+
+  @Post('email/confirm')
+  confirmEmailCode(@CurrentUser() user: RequestUser, @Body() dto: ConfirmEmailCodeDto) {
+    return this.verificationService.confirmEmailCode(user.id, dto.code);
   }
 
   @Post('id')

@@ -9,11 +9,12 @@ const TRUST_SCORE_THRESHOLD = 80;
 /** Dev-only OTP stub — no Twilio wiring in this build. */
 const DEV_OTP_CODE = '123456';
 
-function toVerificationDto(row: any, phoneVerified: boolean) {
+function toVerificationDto(row: any, contact: { phone_verified: boolean; email_verified: boolean }) {
   return {
     id: row.id,
     user_id: row.user_id,
-    phone_status: phoneVerified ? 'verified' : 'unverified',
+    phone_status: contact.phone_verified ? 'verified' : 'unverified',
+    email_status: contact.email_verified ? 'verified' : 'unverified',
     id_status: row.id_status,
     selfie_status: row.selfie_status,
     location_status: row.location_status,
@@ -27,7 +28,7 @@ function toVerificationDto(row: any, phoneVerified: boolean) {
 /** Admin review needs the actual submitted documents, not just their status. */
 function toAdminVerificationDto(row: any) {
   return {
-    ...toVerificationDto(row, false),
+    ...toVerificationDto(row, { phone_verified: false, email_verified: false }),
     id_type: row.id_type,
     id_number: row.id_number,
     id_front_url: row.id_front_url,
@@ -50,18 +51,18 @@ export class VerificationService {
     return rows[0];
   }
 
-  private async getPhoneVerified(userId: string): Promise<boolean> {
-    const { rows } = await this.db.query<{ phone_verified: boolean }>(
-      'SELECT phone_verified FROM users WHERE id = $1',
+  private async getContactVerified(userId: string): Promise<{ phone_verified: boolean; email_verified: boolean }> {
+    const { rows } = await this.db.query<{ phone_verified: boolean; email_verified: boolean }>(
+      'SELECT phone_verified, email_verified FROM users WHERE id = $1',
       [userId],
     );
-    return rows[0]?.phone_verified ?? false;
+    return { phone_verified: rows[0]?.phone_verified ?? false, email_verified: rows[0]?.email_verified ?? false };
   }
 
   async getStatus(userId: string) {
     const row = await this.getRow(userId);
-    const phoneVerified = await this.getPhoneVerified(userId);
-    return toVerificationDto(row, phoneVerified);
+    const contact = await this.getContactVerified(userId);
+    return toVerificationDto(row, contact);
   }
 
   /**
@@ -72,7 +73,7 @@ export class VerificationService {
    */
   private async recomputeTrustScore(userId: string) {
     const row = await this.getRow(userId);
-    const phoneVerified = await this.getPhoneVerified(userId);
+    const { phone_verified: phoneVerified } = await this.getContactVerified(userId);
     const score =
       (phoneVerified ? 20 : 0) +
       (row.id_status === 'verified' ? 30 : 0) +
@@ -102,6 +103,19 @@ export class VerificationService {
       phone,
     ]);
     return this.recomputeTrustScore(userId);
+  }
+
+  /** Same dev stub as sendPhoneOtp — no email provider configured in this build. */
+  async sendEmailCode(userId: string) {
+    const { rows } = await this.db.query<{ email: string }>('SELECT email FROM users WHERE id = $1', [userId]);
+    // eslint-disable-next-line no-console
+    console.log(`[dev email stub] Email to ${rows[0]?.email}: your BoaFie code is ${DEV_OTP_CODE}`);
+  }
+
+  async confirmEmailCode(userId: string, code: string) {
+    if (code !== DEV_OTP_CODE) throw new BadRequestException('Invalid or expired verification code');
+    await this.db.query('UPDATE users SET email_verified = TRUE WHERE id = $1', [userId]);
+    return this.getStatus(userId);
   }
 
   async submitId(userId: string, dto: SubmitIdDto) {

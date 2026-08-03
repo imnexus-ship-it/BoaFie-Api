@@ -54,6 +54,12 @@ export class ConfirmPhoneOtpDto {
   code: string;
 }
 
+export class ConfirmEmailCodeDto {
+  @IsString()
+  @MinLength(4)
+  code: string;
+}
+
 export class RejectVerificationDto {
   @IsString()
   reason: string;
