@@ -26,6 +26,8 @@ import { HealthModule } from './modules/health/health.module';
 import { AiModule } from './modules/ai/ai.module';
 import { MatchingModule } from './modules/matching/matching.module';
 import { BusinessModule } from './modules/business/business.module';
+import { ReviewsModule } from './modules/reviews/reviews.module';
+import { UploadsModule } from './modules/uploads/uploads.module';
 
 @Module({
   imports: [
@@ -52,6 +54,8 @@ import { BusinessModule } from './modules/business/business.module';
     AiModule,
     MatchingModule,
     BusinessModule,
+    ReviewsModule,
+    UploadsModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },

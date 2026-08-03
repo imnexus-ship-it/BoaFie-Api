@@ -11,4 +11,7 @@ export default registerAs('app', () => ({
   hubtelClientId: process.env.HUBTEL_CLIENT_ID,
   hubtelClientSecret: process.env.HUBTEL_CLIENT_SECRET,
   hubtelSenderId: process.env.HUBTEL_SENDER_ID ?? 'BoaFie',
+  cloudinaryCloudName: process.env.CLOUDINARY_CLOUD_NAME,
+  cloudinaryApiKey: process.env.CLOUDINARY_API_KEY,
+  cloudinaryApiSecret: process.env.CLOUDINARY_API_SECRET,
 }));
