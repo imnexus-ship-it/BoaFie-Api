@@ -1,4 +1,7 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { randomInt } from 'crypto';
+import { Resend } from 'resend';
 import { DatabaseService } from '../../database/database.service';
 import { offsetFor } from '../../common/dto/pagination.dto';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -6,8 +9,9 @@ import { SubmitIdDto, SubmitLocationDto } from './dto/verification.dto';
 
 const TRUST_SCORE_THRESHOLD = 80;
 
-/** Dev-only OTP stub — no Twilio wiring in this build. */
+/** Dev-only OTP stub — used whenever Hubtel/Resend aren't configured. */
 const DEV_OTP_CODE = '123456';
+const OTP_CODE_TTL_MS = 10 * 60 * 1000;
 
 function toVerificationDto(row: any, contact: { phone_verified: boolean; email_verified: boolean }) {
   return {
@@ -40,10 +44,37 @@ function toAdminVerificationDto(row: any) {
 
 @Injectable()
 export class VerificationService {
+  private readonly hubtelClientId: string | null;
+  private readonly hubtelClientSecret: string | null;
+  private readonly hubtelSenderId: string;
+  private readonly resendClient: Resend | null;
+  private readonly resendFromEmail: string;
+  /**
+   * Neither Hubtel nor Resend is an OTP-management service like Twilio
+   * Verify — they just send SMS/mail. Codes are generated and tracked
+   * here instead. In-memory is fine given the single-Render-instance
+   * assumption already used for oauthHandoffs in auth.service.ts.
+   */
+  private readonly emailCodes = new Map<string, { code: string; expiresAt: number }>();
+  private readonly phoneCodes = new Map<string, { code: string; expiresAt: number }>();
+
   constructor(
     private readonly db: DatabaseService,
     private readonly notifications: NotificationsService,
-  ) {}
+    config: ConfigService,
+  ) {
+    this.hubtelClientId = config.get<string>('app.hubtelClientId') ?? null;
+    this.hubtelClientSecret = config.get<string>('app.hubtelClientSecret') ?? null;
+    this.hubtelSenderId = config.get<string>('app.hubtelSenderId') ?? 'BoaFie';
+
+    const resendApiKey = config.get<string>('app.resendApiKey');
+    this.resendClient = resendApiKey ? new Resend(resendApiKey) : null;
+    this.resendFromEmail = config.get<string>('app.resendFromEmail') ?? 'BoaFie <onboarding@resend.dev>';
+  }
+
+  private get hubtelConfigured(): boolean {
+    return !!(this.hubtelClientId && this.hubtelClientSecret);
+  }
 
   private async getRow(userId: string) {
     const { rows } = await this.db.query('SELECT * FROM verifications WHERE user_id = $1', [userId]);
@@ -92,12 +123,38 @@ export class VerificationService {
   }
 
   async sendPhoneOtp(phone: string) {
+    if (this.hubtelConfigured) {
+      const code = randomInt(100000, 999999).toString();
+      const url = new URL('https://api.hubtel.com/v1/messages/send');
+      url.searchParams.set('From', this.hubtelSenderId);
+      url.searchParams.set('To', phone);
+      url.searchParams.set('Content', `Your BoaFie verification code is ${code}. It expires in 10 minutes.`);
+      url.searchParams.set('ClientId', this.hubtelClientId!);
+      url.searchParams.set('ClientSecret', this.hubtelClientSecret!);
+
+      const res = await fetch(url, { method: 'GET' });
+      if (!res.ok) {
+        const body = await res.text().catch(() => '');
+        throw new ServiceUnavailableException(`Failed to send verification SMS: ${res.status} ${body}`.trim());
+      }
+      this.phoneCodes.set(phone, { code, expiresAt: Date.now() + OTP_CODE_TTL_MS });
+      return;
+    }
     // eslint-disable-next-line no-console
     console.log(`[dev OTP stub] SMS to ${phone}: your BoaFie code is ${DEV_OTP_CODE}`);
   }
 
   async confirmPhoneOtp(userId: string, phone: string, code: string) {
-    if (code !== DEV_OTP_CODE) throw new BadRequestException('Invalid or expired OTP code');
+    if (this.hubtelConfigured) {
+      const entry = this.phoneCodes.get(phone);
+      if (!entry || entry.code !== code || Date.now() > entry.expiresAt) {
+        throw new BadRequestException('Invalid or expired OTP code');
+      }
+      this.phoneCodes.delete(phone);
+    } else if (code !== DEV_OTP_CODE) {
+      throw new BadRequestException('Invalid or expired OTP code');
+    }
+
     await this.db.query('UPDATE users SET phone = $2, phone_verified = TRUE WHERE id = $1', [
       userId,
       phone,
@@ -105,15 +162,40 @@ export class VerificationService {
     return this.recomputeTrustScore(userId);
   }
 
-  /** Same dev stub as sendPhoneOtp — no email provider configured in this build. */
   async sendEmailCode(userId: string) {
     const { rows } = await this.db.query<{ email: string }>('SELECT email FROM users WHERE id = $1', [userId]);
+    const email = rows[0]?.email;
+
+    if (this.resendClient && email) {
+      const code = randomInt(100000, 999999).toString();
+      const { error } = await this.resendClient.emails.send({
+        from: this.resendFromEmail,
+        to: email,
+        subject: 'Your BoaFie verification code',
+        text: `Your BoaFie verification code is ${code}. It expires in 10 minutes.`,
+      });
+      // Resend's SDK doesn't throw on API errors — it returns { error }
+      // instead. Only store the code (and treat the send as successful)
+      // once we know it actually went out.
+      if (error) throw new ServiceUnavailableException(`Failed to send verification email: ${error.message}`);
+      this.emailCodes.set(userId, { code, expiresAt: Date.now() + OTP_CODE_TTL_MS });
+      return;
+    }
     // eslint-disable-next-line no-console
-    console.log(`[dev email stub] Email to ${rows[0]?.email}: your BoaFie code is ${DEV_OTP_CODE}`);
+    console.log(`[dev email stub] Email to ${email}: your BoaFie code is ${DEV_OTP_CODE}`);
   }
 
   async confirmEmailCode(userId: string, code: string) {
-    if (code !== DEV_OTP_CODE) throw new BadRequestException('Invalid or expired verification code');
+    if (this.resendClient) {
+      const entry = this.emailCodes.get(userId);
+      if (!entry || entry.code !== code || Date.now() > entry.expiresAt) {
+        throw new BadRequestException('Invalid or expired verification code');
+      }
+      this.emailCodes.delete(userId);
+    } else if (code !== DEV_OTP_CODE) {
+      throw new BadRequestException('Invalid or expired verification code');
+    }
+
     await this.db.query('UPDATE users SET email_verified = TRUE WHERE id = $1', [userId]);
     return this.getStatus(userId);
   }
