@@ -31,6 +31,7 @@ import { ReviewsModule } from './modules/reviews/reviews.module';
 import { UploadsModule } from './modules/uploads/uploads.module';
 import { ContactModule } from './modules/contact/contact.module';
 import { DisputesModule } from './modules/disputes/disputes.module';
+import { SavedProfessionalsModule } from './modules/saved-professionals/saved-professionals.module';
 
 @Module({
   imports: [
@@ -62,6 +63,7 @@ import { DisputesModule } from './modules/disputes/disputes.module';
     UploadsModule,
     ContactModule,
     DisputesModule,
+    SavedProfessionalsModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },

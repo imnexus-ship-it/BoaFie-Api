@@ -80,10 +80,19 @@ export class UsersService {
         `SELECT COUNT(*) FROM contracts WHERE client_id = $1 AND status = 'in_progress'`,
         [userId],
       );
+      // "Pending actions" = milestones actually waiting on this client right
+      // now (submitted for review) — a more precise trigger for attention
+      // than just counting every in-progress contract.
+      const { rows: pendingActionRows } = await this.db.query<{ count: string }>(
+        `SELECT COUNT(*) FROM milestones m JOIN contracts c ON c.id = m.contract_id
+         WHERE c.client_id = $1 AND m.status = 'submitted'`,
+        [userId],
+      );
       return {
         ...base,
         active_jobs: parseInt(rows[0].count, 10),
         open_contracts: parseInt(contractRows[0].count, 10),
+        pending_actions: parseInt(pendingActionRows[0].count, 10),
       };
     }
 

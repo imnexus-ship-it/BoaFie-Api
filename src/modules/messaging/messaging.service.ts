@@ -1,4 +1,5 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { DatabaseService } from '../../database/database.service';
 import { ConversationsRepository } from './conversations.repository';
 import { MessagesRepository } from './messages.repository';
 import { MessageFilterService } from './message-filter.service';
@@ -18,14 +19,45 @@ const ATTACHMENT_REQUIRED_TYPES = ['image', 'file', 'voice_note', 'video'];
 @Injectable()
 export class MessagingService {
   constructor(
+    private readonly db: DatabaseService,
     private readonly conversations: ConversationsRepository,
     private readonly messages: MessagesRepository,
     private readonly notifications: NotificationsService,
     private readonly filter: MessageFilterService,
   ) {}
 
-  listConversations(userId: string) {
-    return this.conversations.listForUser(userId);
+  /**
+   * Enriches each conversation with the other participant's name/avatar
+   * and a preview of the most recent message — the dashboard "Messages"
+   * panel needs both and the bare conversation row has neither. Two
+   * extra queries per conversation, but conversation counts per user are
+   * small (dozens at most), so this stays simple rather than adding a
+   * materialized "last message" column to maintain.
+   */
+  async listConversations(userId: string) {
+    const rows = await this.conversations.listForUser(userId);
+    return Promise.all(
+      rows.map(async (c) => {
+        const otherId = c.participant_ids.find((id) => id !== userId);
+        const [otherUserResult, lastMessageResult] = await Promise.all([
+          otherId
+            ? this.db.query<{ id: string; full_name: string; avatar_url: string | null }>(
+                'SELECT id, full_name, avatar_url FROM users WHERE id = $1',
+                [otherId],
+              )
+            : null,
+          this.db.query<{ content: string | null; type: string; created_at: string }>(
+            'SELECT content, type, created_at FROM messages WHERE conversation_id = $1 ORDER BY created_at DESC LIMIT 1',
+            [c.id],
+          ),
+        ]);
+        return {
+          ...c,
+          other_participant: otherUserResult?.rows[0] ?? null,
+          last_message: lastMessageResult.rows[0] ?? null,
+        };
+      }),
+    );
   }
 
   async getConversation(id: string, userId: string) {
