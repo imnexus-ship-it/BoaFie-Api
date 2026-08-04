@@ -204,8 +204,8 @@ export class MilestonesService {
 
     await this.notifications.notify(
       m.worker_id,
-      'milestone',
-      'Milestone approved — funds released',
+      'payment',
+      'Payment released',
       `"${m.title}" was approved. GHS ${netAmount.toFixed(2)} was credited to your wallet after commission.`,
       { contract_id: m.contract_id, milestone_id: milestoneId, net_amount: netAmount },
     );

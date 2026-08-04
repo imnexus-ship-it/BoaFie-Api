@@ -22,6 +22,7 @@ export class NotificationsService {
   /** Fire-and-forget from other modules on real lifecycle events — never throws into the caller's flow. */
   async notify(userId: string, type: NotificationType, title: string, body?: string, data?: Record<string, unknown>) {
     try {
+      if (!(await this.notifications.isEnabled(userId, type))) return;
       await this.notifications.create(userId, type, title, body, data);
     } catch {
       // A notification failing to write should never fail the underlying

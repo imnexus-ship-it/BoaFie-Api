@@ -1,8 +1,10 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { DatabaseService } from '../../database/database.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { TOGGLEABLE_NOTIFICATION_TYPES } from '../notifications/notification.entity';
 import { UsersRepository } from './users.repository';
 import { UpdateUserDto } from './dto/update-user.dto';
+import { UpdateNotificationPreferencesDto } from './dto/update-notification-preferences.dto';
 import { toPublicUser } from './user.entity';
 
 @Injectable()
@@ -23,6 +25,22 @@ export class UsersService {
     const updated = await this.users.updateById(userId, dto as Record<string, unknown>);
     if (!updated) throw new NotFoundException('User not found');
     return toPublicUser(updated);
+  }
+
+  /** Absence of a key means enabled (default-on) — see notifications.repository.ts's isEnabled(). */
+  async getNotificationPreferences(userId: string) {
+    const user = await this.users.findById(userId);
+    if (!user) throw new NotFoundException('User not found');
+    const prefs = user.notification_prefs ?? {};
+    return Object.fromEntries(TOGGLEABLE_NOTIFICATION_TYPES.map((type) => [type, prefs[type] !== false]));
+  }
+
+  async updateNotificationPreferences(userId: string, dto: UpdateNotificationPreferencesDto) {
+    const user = await this.users.findById(userId);
+    if (!user) throw new NotFoundException('User not found');
+    const merged = { ...(user.notification_prefs ?? {}), ...dto };
+    await this.db.query('UPDATE users SET notification_prefs = $2 WHERE id = $1', [userId, JSON.stringify(merged)]);
+    return this.getNotificationPreferences(userId);
   }
 
   async getPublicProfile(id: string) {

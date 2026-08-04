@@ -10,6 +10,7 @@ import oauthConfig from '../../config/oauth.config';
 import { DatabaseService } from '../../database/database.service';
 import { UsersRepository } from '../users/users.repository';
 import { UserRow, toAuthUser } from '../users/user.entity';
+import { NotificationsService } from '../notifications/notifications.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 
@@ -41,6 +42,7 @@ export class AuthService {
     private readonly users: UsersRepository,
     private readonly db: DatabaseService,
     private readonly jwt: JwtService,
+    private readonly notifications: NotificationsService,
     @Inject(jwtConfig.KEY) private readonly config: ConfigType<typeof jwtConfig>,
     @Inject(appConfig.KEY) private readonly app: ConfigType<typeof appConfig>,
     @Inject(oauthConfig.KEY) private readonly oauth: ConfigType<typeof oauthConfig>,
@@ -219,6 +221,12 @@ export class AuthService {
     // A password reset should invalidate every existing session, same as
     // the reuse-detection path in refresh() above.
     await this.db.query('DELETE FROM refresh_tokens WHERE user_id = $1', [stored.user_id]);
+    await this.notifications.notify(
+      stored.user_id,
+      'security',
+      'Your password was changed',
+      'If this wasn\'t you, contact support immediately — every other session has been signed out.',
+    );
 
     return { reset: true };
   }

@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
 import { ConfigModule } from '@nestjs/config';
+import { ScheduleModule } from '@nestjs/schedule';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import appConfig from './config/app.config';
 import databaseConfig from './config/database.config';
@@ -37,6 +38,7 @@ import { ContactModule } from './modules/contact/contact.module';
       load: [appConfig, databaseConfig, jwtConfig, oauthConfig],
     }),
     ThrottlerModule.forRoot([{ ttl: 60000, limit: 120 }]),
+    ScheduleModule.forRoot(),
     DatabaseModule,
     AuthModule,
     UsersModule,

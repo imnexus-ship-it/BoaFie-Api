@@ -20,6 +20,15 @@ export class NotificationsRepository extends BaseRepository<NotificationRow> {
     });
   }
 
+  /** Absence of a key in `notification_prefs` means enabled (default-on). */
+  async isEnabled(userId: string, type: NotificationType): Promise<boolean> {
+    const { rows } = await this.db.query<{ enabled: boolean | null }>(
+      `SELECT (notification_prefs->>$2)::boolean AS enabled FROM users WHERE id = $1`,
+      [userId, type],
+    );
+    return rows[0]?.enabled !== false;
+  }
+
   async listForUser(userId: string, page = 1, limit = 20) {
     const total = await this.count({ user_id: userId });
     const rows = await this.findMany(

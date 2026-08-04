@@ -1,6 +1,7 @@
 import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { ConversationsRepository } from './conversations.repository';
 import { MessagesRepository } from './messages.repository';
+import { NotificationsService } from '../notifications/notifications.service';
 import { CreateConversationDto } from './dto/create-conversation.dto';
 import { SendMessageDto } from './dto/send-message.dto';
 
@@ -9,6 +10,7 @@ export class MessagingService {
   constructor(
     private readonly conversations: ConversationsRepository,
     private readonly messages: MessagesRepository,
+    private readonly notifications: NotificationsService,
   ) {}
 
   listConversations(userId: string) {
@@ -52,6 +54,18 @@ export class MessagingService {
     await this.conversations.updateLastMessageAt(conversationId);
 
     const withSender = await this.messages.findByIdWithSender(message.id);
+
+    const recipientIds = conversation.participant_ids.filter((id) => id !== userId);
+    for (const recipientId of recipientIds) {
+      await this.notifications.notify(
+        recipientId,
+        'message',
+        `New message from ${withSender!.sender!.full_name}`,
+        dto.type === 'text' ? dto.content : undefined,
+        { conversation_id: conversationId },
+      );
+    }
+
     return withSender!;
   }
 

@@ -5,6 +5,7 @@ import { PaginationQueryDto } from '../../common/dto/pagination.dto';
 import { UsersService } from './users.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { UpdateUserDto } from './dto/update-user.dto';
+import { UpdateNotificationPreferencesDto } from './dto/update-notification-preferences.dto';
 
 @Controller('users')
 export class UsersController {
@@ -47,6 +48,16 @@ export class UsersController {
   @Patch('me/notifications/:id/read')
   markNotificationRead(@CurrentUser() user: RequestUser, @Param('id') id: string) {
     return this.notificationsService.markRead(id, user.id);
+  }
+
+  @Get('me/notification-preferences')
+  getNotificationPreferences(@CurrentUser() user: RequestUser) {
+    return this.usersService.getNotificationPreferences(user.id);
+  }
+
+  @Patch('me/notification-preferences')
+  updateNotificationPreferences(@CurrentUser() user: RequestUser, @Body() dto: UpdateNotificationPreferencesDto) {
+    return this.usersService.updateNotificationPreferences(user.id, dto);
   }
 
   @Public()

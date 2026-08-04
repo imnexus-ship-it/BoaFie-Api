@@ -26,6 +26,7 @@ function buildService(overrides: { users?: Partial<UsersRepository>; db?: Partia
   } as unknown as DatabaseService;
 
   const jwt = { sign: jest.fn().mockReturnValue('signed-access-token') } as any;
+  const notifications = { notify: jest.fn().mockResolvedValue(undefined) } as any;
   const jwtConfigValue = {
     accessSecret: 'secret',
     accessExpiresIn: '15m',
@@ -41,7 +42,7 @@ function buildService(overrides: { users?: Partial<UsersRepository>; db?: Partia
     yahooRedirectUri: 'http://localhost:3001/v1/auth/yahoo/callback',
   };
 
-  const service = new AuthService(users, db, jwt, jwtConfigValue as any, appConfigValue as any, oauthConfigValue as any);
+  const service = new AuthService(users, db, jwt, notifications, jwtConfigValue as any, appConfigValue as any, oauthConfigValue as any);
   return { service, users, db };
 }
 

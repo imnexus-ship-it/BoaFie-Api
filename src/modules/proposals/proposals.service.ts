@@ -183,6 +183,13 @@ export class ProposalsService {
       `Your proposal for "${job.title}" was accepted — a contract has been created.`,
       { job_id: job.id, proposal_id: proposalId, contract_id: contract.id },
     );
+    await this.notifications.notify(
+      clientId,
+      'payment',
+      'Payment funded',
+      `GHS ${Number(proposal.proposed_rate).toFixed(2)} is now held in escrow for "${job.title}".`,
+      { job_id: job.id, proposal_id: proposalId, contract_id: contract.id },
+    );
 
     return {
       proposal_id: proposalId,

@@ -31,6 +31,7 @@ export interface UserRow {
   preferred_currency: string;
   preferred_language: string;
   last_active_at: string | null;
+  notification_prefs: Record<string, boolean>;
   created_at: string;
   updated_at: string;
 }
