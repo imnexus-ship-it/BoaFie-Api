@@ -3,6 +3,7 @@ import { DatabaseService } from '../../database/database.service';
 import { CommissionService } from './commission.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { DisputesService } from '../disputes/disputes.service';
+import { MessagingService } from '../messaging/messaging.service';
 import { CreateMilestoneDto } from './dto/create-milestone.dto';
 
 function toMilestoneDto(row: any) {
@@ -27,6 +28,7 @@ export class MilestonesService {
     private readonly commission: CommissionService,
     private readonly notifications: NotificationsService,
     private readonly disputes: DisputesService,
+    private readonly messaging: MessagingService,
   ) {}
 
   private async getContractForMilestone(milestoneId: string) {
@@ -101,6 +103,13 @@ export class MilestonesService {
       `"${m.title}" was submitted and is awaiting your approval.`,
       { contract_id: m.contract_id, milestone_id: milestoneId },
     );
+    await this.messaging.postSystemMessageForContract(
+      m.contract_id,
+      workerId,
+      'milestone_update',
+      `Submitted milestone "${m.title}" for review.`,
+      { milestone_id: milestoneId, event: 'submitted' },
+    );
     return toMilestoneDto(rows[0]);
   }
 
@@ -128,6 +137,13 @@ export class MilestonesService {
       'Changes requested on your milestone',
       `The client asked for changes on "${m.title}": ${feedback}`,
       { contract_id: m.contract_id, milestone_id: milestoneId },
+    );
+    await this.messaging.postSystemMessageForContract(
+      m.contract_id,
+      clientId,
+      'milestone_update',
+      `Requested changes on "${m.title}": ${feedback}`,
+      { milestone_id: milestoneId, event: 'changes_requested' },
     );
     return toMilestoneDto(rows[0]);
   }
@@ -212,6 +228,13 @@ export class MilestonesService {
       'Payment released',
       `"${m.title}" was approved. GHS ${netAmount.toFixed(2)} was credited to your wallet after commission.`,
       { contract_id: m.contract_id, milestone_id: milestoneId, net_amount: netAmount },
+    );
+    await this.messaging.postSystemMessageForContract(
+      m.contract_id,
+      clientId,
+      'milestone_update',
+      `Approved milestone "${m.title}" — GHS ${netAmount.toFixed(2)} released.`,
+      { milestone_id: milestoneId, event: 'approved', net_amount: netAmount },
     );
 
     return toMilestoneDto(updated);

@@ -3,8 +3,15 @@ import { ConfigService } from '@nestjs/config';
 import { v2 as cloudinary } from 'cloudinary';
 import { Readable } from 'stream';
 
-const ALLOWED_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
-const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024;
+const ALLOWED_MIME_TYPES = [
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'application/pdf',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+];
+const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024;
 
 @Injectable()
 export class UploadsService {
@@ -20,13 +27,13 @@ export class UploadsService {
     }
   }
 
-  async uploadImage(file: Express.Multer.File | undefined): Promise<{ url: string }> {
+  async upload(file: Express.Multer.File | undefined): Promise<{ url: string }> {
     if (!file) throw new BadRequestException('No file provided');
     if (!ALLOWED_MIME_TYPES.includes(file.mimetype)) {
       throw new BadRequestException(`Unsupported file type. Allowed: ${ALLOWED_MIME_TYPES.join(', ')}`);
     }
     if (file.size > MAX_FILE_SIZE_BYTES) {
-      throw new BadRequestException('File is too large — max 5MB');
+      throw new BadRequestException('File is too large — max 10MB');
     }
     if (!this.configured) {
       throw new ServiceUnavailableException('File uploads are not configured on this server yet');
@@ -34,7 +41,7 @@ export class UploadsService {
 
     const url = await new Promise<string>((resolve, reject) => {
       const uploadStream = cloudinary.uploader.upload_stream(
-        { folder: 'boafie', resource_type: 'image' },
+        { folder: 'boafie', resource_type: 'auto' },
         (error, result) => {
           if (error || !result) return reject(error ?? new Error('Cloudinary upload failed'));
           resolve(result.secure_url);

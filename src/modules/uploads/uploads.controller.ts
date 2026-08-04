@@ -9,6 +9,6 @@ export class UploadsController {
   @Post()
   @UseInterceptors(FileInterceptor('file'))
   upload(@UploadedFile() file: Express.Multer.File) {
-    return this.uploadsService.uploadImage(file);
+    return this.uploadsService.upload(file);
   }
 }
