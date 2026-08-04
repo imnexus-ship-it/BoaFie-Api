@@ -23,7 +23,7 @@ export class FreelancersService {
     const remote = query.remote === undefined ? undefined : query.remote === 'true';
 
     const { rows, total } = await this.freelancers.list(
-      { skills, rate_max: query.rate_max, remote },
+      { skills, rate_max: query.rate_max, remote, rating_min: query.rating_min, verified: query.verified },
       query.sort,
       limit,
       offsetFor(page, limit),

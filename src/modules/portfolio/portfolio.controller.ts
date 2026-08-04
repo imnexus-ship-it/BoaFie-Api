@@ -1,5 +1,6 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post } from '@nestjs/common';
 import { CurrentUser, RequestUser } from '../../common/decorators/current-user.decorator';
+import { Public } from '../../common/decorators/public.decorator';
 import { PortfolioService } from './portfolio.service';
 import { CreatePortfolioItemDto } from './dto/create-portfolio-item.dto';
 
@@ -10,6 +11,12 @@ export class PortfolioController {
   @Get()
   list(@CurrentUser() user: RequestUser) {
     return this.portfolioService.list(user.id);
+  }
+
+  @Public()
+  @Get('user/:userId')
+  listPublic(@Param('userId') userId: string) {
+    return this.portfolioService.list(userId);
   }
 
   @Post()

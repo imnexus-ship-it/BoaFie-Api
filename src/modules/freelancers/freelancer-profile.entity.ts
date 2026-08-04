@@ -28,11 +28,19 @@ export interface JoinedUser {
   status: string;
 }
 
-export type FreelancerProfileWithUser = FreelancerProfileRow & { users?: JoinedUser };
+export type FreelancerProfileWithUser = FreelancerProfileRow & {
+  users?: JoinedUser;
+  avg_rating?: string | null;
+  review_count?: string | null;
+  overall_verified?: boolean | null;
+};
 
 /**
  * Maps a DB row (NUMERIC columns come back from `pg` as strings) to the
- * shape boafie-web's FreelancerProfile type expects.
+ * shape boafie-web's FreelancerProfile type expects. portfolio/linkedin/
+ * github links are fine to surface publicly — they're credential links
+ * the freelancer chose to add, not the kind of off-platform contact info
+ * (phone/email/WhatsApp) the messaging filter blocks.
  */
 export function toFreelancerProfile(row: FreelancerProfileWithUser) {
   return {
@@ -41,11 +49,19 @@ export function toFreelancerProfile(row: FreelancerProfileWithUser) {
     title: row.title,
     skills: row.skills,
     hourly_rate_ghs: row.hourly_rate_ghs !== null ? Number(row.hourly_rate_ghs) : null,
+    pricing_model: row.hourly_rate_ghs !== null ? ('hourly' as const) : null,
     availability: row.availability,
     remote_only: row.remote_only,
     location_text: row.location_text,
+    region: row.region,
+    portfolio_url: row.portfolio_url,
+    linkedin_url: row.linkedin_url,
+    github_url: row.github_url,
     total_jobs_done: row.total_jobs_done,
     ai_bio: row.ai_bio,
+    avg_rating: row.avg_rating ? Number(row.avg_rating) : null,
+    review_count: row.review_count ? Number(row.review_count) : 0,
+    verified: row.overall_verified ?? false,
     users: row.users,
   };
 }

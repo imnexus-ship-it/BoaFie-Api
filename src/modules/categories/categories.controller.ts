@@ -10,7 +10,7 @@ export class CategoriesController {
   @Get()
   async list() {
     const { rows } = await this.db.query(
-      'SELECT id, name, slug, type, icon FROM categories WHERE is_active = TRUE ORDER BY sort_order',
+      'SELECT id, name, slug, type, icon, description FROM categories WHERE is_active = TRUE ORDER BY sort_order',
     );
     return rows;
   }

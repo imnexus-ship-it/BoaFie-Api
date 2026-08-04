@@ -20,6 +20,8 @@ export class ArtisansService {
         location: query.location,
         availability: query.availability,
         rate_max: query.rate_max,
+        rating_min: query.rating_min,
+        verified: query.verified,
       },
       query.sort,
       limit,
