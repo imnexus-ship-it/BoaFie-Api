@@ -1,6 +1,9 @@
 import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { DatabaseService } from '../../database/database.service';
 import { offsetFor } from '../../common/dto/pagination.dto';
+import { CommissionService } from './commission.service';
+import { NotificationsService } from '../notifications/notifications.service';
+import { DisputesService } from '../disputes/disputes.service';
 
 const DETAIL_JOIN = `
   SELECT contracts.*,
@@ -32,7 +35,12 @@ function toContractDto(row: any) {
 
 @Injectable()
 export class ContractsService {
-  constructor(private readonly db: DatabaseService) {}
+  constructor(
+    private readonly db: DatabaseService,
+    private readonly commission: CommissionService,
+    private readonly notifications: NotificationsService,
+    private readonly disputes: DisputesService,
+  ) {}
 
   async list(userId: string, page = 1, limit = 20) {
     const { rows: countRows } = await this.db.query<{ count: string }>(
@@ -78,6 +86,7 @@ export class ContractsService {
     const contract = rows[0];
     if (!contract) throw new NotFoundException('Contract not found');
     if (contract.client_id !== clientId) throw new ForbiddenException('Only the client can complete a contract');
+    await this.disputes.assertNoActiveDispute(id);
 
     await this.db.query(`UPDATE contracts SET status = 'completed' WHERE id = $1`, [id]);
     await this.db.query(`UPDATE jobs SET status = 'completed' WHERE id = $1`, [contract.job_id]);
@@ -88,6 +97,83 @@ export class ContractsService {
       contract.worker_id,
     ]);
 
+    await this.releaseEscrowForMilestonelessContract(id, contract, clientId);
+
     return this.findById(id, clientId);
+  }
+
+  /**
+   * Milestones are optional — a contract can be completed with zero
+   * milestones ever created. Before this fix, MilestonesService.approve
+   * was the ONLY place escrow money ever moved, so a lump-sum contract's
+   * held funds had no path to the worker at all. Scoped deliberately
+   * narrow: only auto-releases when there are NO milestones, so a
+   * contract that used milestones for partial payment still requires
+   * each one to go through explicit client approval — completing the
+   * contract never bypasses that review.
+   */
+  private async releaseEscrowForMilestonelessContract(contractId: string, contract: any, releasedBy: string) {
+    const { rows: milestoneRows } = await this.db.query<{ count: string }>(
+      'SELECT COUNT(*) FROM milestones WHERE contract_id = $1',
+      [contractId],
+    );
+    if (parseInt(milestoneRows[0].count, 10) > 0) return;
+
+    await this.db.withTransaction(async (client) => {
+      const { rows: escrowRows } = await client.query(
+        'SELECT * FROM escrow_accounts WHERE contract_id = $1 FOR UPDATE',
+        [contractId],
+      );
+      const escrow = escrowRows[0];
+      const heldAmount = escrow ? Number(escrow.held_amount) : 0;
+      if (!escrow || heldAmount <= 0) return;
+
+      const breakdown = await this.commission.calculate(contract.worker_id, heldAmount);
+
+      await client.query(
+        `UPDATE escrow_accounts SET held_amount = 0, released_amount = released_amount + $2, status = 'released' WHERE id = $1`,
+        [escrow.id, heldAmount],
+      );
+      await client.query(
+        `INSERT INTO escrow_releases (escrow_id, amount, released_by, note) VALUES ($1, $2, $3, $4)`,
+        [escrow.id, heldAmount, releasedBy, 'Released on contract completion (no milestones set up)'],
+      );
+
+      const { rows: walletRows } = await client.query('SELECT id FROM wallets WHERE user_id = $1', [
+        contract.worker_id,
+      ]);
+      if (walletRows[0]) {
+        await client.query(
+          `INSERT INTO transactions
+             (user_id, wallet_id, type, status, amount, currency, contract_id, escrow_id,
+              commission_rate, commission_amount, net_amount, description)
+           VALUES ($1, $2, 'escrow_release', 'completed', $3, 'GHS', $4, $5, $6, $7, $8, $9)`,
+          [
+            contract.worker_id,
+            walletRows[0].id,
+            heldAmount,
+            contractId,
+            escrow.id,
+            breakdown.commissionRate,
+            breakdown.commissionAmount,
+            breakdown.netAmount,
+            `Full payment released: ${contract.title}`,
+          ],
+        );
+        await client.query(
+          `UPDATE wallets SET balance_ghs = balance_ghs + $2, lifetime_earned = lifetime_earned + $2,
+             last_escrow_credit_at = NOW() WHERE user_id = $1`,
+          [contract.worker_id, breakdown.netAmount],
+        );
+      }
+
+      await this.notifications.notify(
+        contract.worker_id,
+        'payment',
+        'Payment released',
+        `"${contract.title}" was marked complete. GHS ${breakdown.netAmount.toFixed(2)} was credited to your wallet after commission.`,
+        { contract_id: contractId, net_amount: breakdown.netAmount },
+      );
+    });
   }
 }

@@ -2,6 +2,7 @@ import { BadRequestException, ForbiddenException, Injectable, NotFoundException 
 import { DatabaseService } from '../../database/database.service';
 import { CommissionService } from './commission.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { DisputesService } from '../disputes/disputes.service';
 import { CreateMilestoneDto } from './dto/create-milestone.dto';
 
 function toMilestoneDto(row: any) {
@@ -25,6 +26,7 @@ export class MilestonesService {
     private readonly db: DatabaseService,
     private readonly commission: CommissionService,
     private readonly notifications: NotificationsService,
+    private readonly disputes: DisputesService,
   ) {}
 
   private async getContractForMilestone(milestoneId: string) {
@@ -114,6 +116,7 @@ export class MilestonesService {
     if (!m) throw new NotFoundException('Milestone not found');
     if (m.client_id !== clientId) throw new ForbiddenException('Not your contract');
     if (m.status !== 'submitted') throw new BadRequestException('Milestone is not awaiting review');
+    await this.disputes.assertNoActiveDispute(m.contract_id);
 
     const { rows } = await this.db.query(
       `UPDATE milestones SET status = 'in_progress', submission_note = $2 WHERE id = $1 RETURNING *`,
@@ -139,6 +142,7 @@ export class MilestonesService {
     if (!m) throw new NotFoundException('Milestone not found');
     if (m.client_id !== clientId) throw new ForbiddenException('Not your contract');
     if (m.status !== 'submitted') throw new BadRequestException('Milestone is not awaiting review');
+    await this.disputes.assertNoActiveDispute(m.contract_id);
 
     const { commissionRate, commissionAmount, netAmount } = await this.commission.calculate(
       m.worker_id,

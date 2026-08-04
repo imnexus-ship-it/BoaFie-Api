@@ -30,6 +30,7 @@ import { BusinessModule } from './modules/business/business.module';
 import { ReviewsModule } from './modules/reviews/reviews.module';
 import { UploadsModule } from './modules/uploads/uploads.module';
 import { ContactModule } from './modules/contact/contact.module';
+import { DisputesModule } from './modules/disputes/disputes.module';
 
 @Module({
   imports: [
@@ -60,6 +61,7 @@ import { ContactModule } from './modules/contact/contact.module';
     ReviewsModule,
     UploadsModule,
     ContactModule,
+    DisputesModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },
