@@ -28,6 +28,7 @@ import { MatchingModule } from './modules/matching/matching.module';
 import { BusinessModule } from './modules/business/business.module';
 import { ReviewsModule } from './modules/reviews/reviews.module';
 import { UploadsModule } from './modules/uploads/uploads.module';
+import { ContactModule } from './modules/contact/contact.module';
 
 @Module({
   imports: [
@@ -56,6 +57,7 @@ import { UploadsModule } from './modules/uploads/uploads.module';
     BusinessModule,
     ReviewsModule,
     UploadsModule,
+    ContactModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },
