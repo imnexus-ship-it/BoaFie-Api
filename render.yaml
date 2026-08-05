@@ -45,12 +45,24 @@ services:
       # exchange. Leave blank to keep that provider disabled.
       - key: GOOGLE_CLIENT_ID
         sync: false
+      # boafie-mobile's own Google OAuth clients (separate from the web
+      # client above — Google issues one per platform). Leave blank until
+      # provisioned in Google Cloud Console; native Google sign-in on
+      # mobile stays disabled until then, web is unaffected either way.
+      - key: GOOGLE_IOS_CLIENT_ID
+        sync: false
+      - key: GOOGLE_ANDROID_CLIENT_ID
+        sync: false
       - key: YAHOO_CLIENT_ID
         sync: false
       - key: YAHOO_CLIENT_SECRET
         sync: false
       - key: YAHOO_REDIRECT_URI
         value: https://boafie-api.onrender.com/v1/auth/yahoo/callback
+      # boafie-mobile's app.json `expo.scheme` — only reachable from a
+      # dev-client/standalone build, not Expo Go.
+      - key: MOBILE_AUTH_CALLBACK_URL
+        value: boafie://auth/callback
 
   - name: boafie-web
     type: web

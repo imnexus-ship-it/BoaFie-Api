@@ -68,30 +68,43 @@ export class AuthController {
     return this.authService.loginWithGoogle(dto.id_token, dto.role);
   }
 
-  /** Kicks off the redirect flow — the frontend navigates the whole page here, it doesn't fetch() it. */
+  /**
+   * Kicks off the redirect flow. Web navigates the whole page here directly;
+   * the mobile app opens it inside an in-app browser session
+   * (expo-web-browser's openAuthSessionAsync) and passes `platform=app` so
+   * the callback below knows to hand back to the app instead of the website.
+   */
   @Public()
   @Get('yahoo')
-  startYahoo(@Query('role') role: string | undefined, @Res() res: Response) {
-    res.redirect(this.authService.getYahooAuthUrl(role));
+  startYahoo(
+    @Query('role') role: string | undefined,
+    @Query('platform') platform: string | undefined,
+    @Res() res: Response,
+  ) {
+    res.redirect(this.authService.getYahooAuthUrl(role, platform));
   }
 
   @Public()
   @Get('yahoo/callback')
   async yahooCallback(
     @Query('code') code: string | undefined,
-    @Query('state') role: string | undefined,
+    @Query('state') state: string | undefined,
     @Query('error') error: string | undefined,
     @Res() res: Response,
   ) {
+    const { role, platform } = this.authService.parseYahooState(state);
+    const successBase = platform === 'app' ? this.app.mobileAuthCallbackUrl : `${this.app.frontendUrl}/auth/callback`;
+    const errorBase = platform === 'app' ? this.app.mobileAuthCallbackUrl : `${this.app.frontendUrl}/login`;
+
     if (error || !code) {
-      res.redirect(`${this.app.frontendUrl}/login?oauth_error=yahoo`);
+      res.redirect(`${errorBase}?oauth_error=yahoo`);
       return;
     }
     try {
       const handoff = await this.authService.handleYahooCallback(code, role);
-      res.redirect(`${this.app.frontendUrl}/auth/callback?handoff=${handoff}`);
+      res.redirect(`${successBase}?handoff=${handoff}`);
     } catch {
-      res.redirect(`${this.app.frontendUrl}/login?oauth_error=yahoo`);
+      res.redirect(`${errorBase}?oauth_error=yahoo`);
     }
   }
 

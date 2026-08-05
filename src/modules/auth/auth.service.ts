@@ -279,15 +279,24 @@ export class AuthService {
     return user;
   }
 
-  /** Verifies the ID token Google's client-side library hands the frontend directly — no redirect needed. */
+  /**
+   * Verifies the ID token Google's client-side library (web) or
+   * expo-auth-session (mobile) hands back directly — no redirect needed.
+   * `aud` on the token always equals whichever client id requested it, so
+   * every platform's client id that's actually configured is accepted;
+   * verifyIdToken throws if the token's audience matches none of them.
+   */
   async loginWithGoogle(idToken: string, role?: string) {
-    if (!this.oauth.googleClientId) {
+    const audience = [this.oauth.googleClientId, this.oauth.googleIosClientId, this.oauth.googleAndroidClientId].filter(
+      Boolean,
+    );
+    if (audience.length === 0) {
       throw new BadRequestException('Google sign-in is not configured');
     }
-    const client = new OAuth2Client(this.oauth.googleClientId);
+    const client = new OAuth2Client();
     let payload;
     try {
-      const ticket = await client.verifyIdToken({ idToken, audience: this.oauth.googleClientId });
+      const ticket = await client.verifyIdToken({ idToken, audience });
       payload = ticket.getPayload();
     } catch {
       throw new UnauthorizedException('Invalid Google token');
@@ -306,8 +315,14 @@ export class AuthService {
     return this.issueTokens(user);
   }
 
-  /** Yahoo has no client-side ID-token SDK — this builds the standard OAuth2 authorize-redirect URL. */
-  getYahooAuthUrl(role?: string): string {
+  /**
+   * Yahoo has no client-side ID-token SDK — this builds the standard OAuth2
+   * authorize-redirect URL. `state` round-trips through Yahoo unmodified,
+   * so it's used to carry both the signup role and which platform started
+   * the flow (web browser vs. the mobile app's in-app browser session) —
+   * the callback needs the latter to know where to redirect back to.
+   */
+  getYahooAuthUrl(role?: string, platform?: string): string {
     if (!this.oauth.yahooClientId) {
       throw new BadRequestException('Yahoo sign-in is not configured');
     }
@@ -317,9 +332,15 @@ export class AuthService {
       redirect_uri: this.oauth.yahooRedirectUri,
       response_type: 'code',
       scope: 'openid email profile',
-      state: signupRole,
+      state: `${signupRole}:${platform === 'app' ? 'app' : 'web'}`,
     });
     return `https://api.login.yahoo.com/oauth2/request_auth?${params.toString()}`;
+  }
+
+  /** Splits the `role:platform` pair packed into `state` by getYahooAuthUrl back apart. */
+  parseYahooState(state: string | undefined): { role?: string; platform: 'web' | 'app' } {
+    const [role, platform] = (state ?? '').split(':');
+    return { role, platform: platform === 'app' ? 'app' : 'web' };
   }
 
   /** Exchanges Yahoo's authorization code for tokens + profile, then stashes an internal handoff code. */
