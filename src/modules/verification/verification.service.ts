@@ -125,12 +125,12 @@ export class VerificationService {
   async sendPhoneOtp(phone: string) {
     if (this.hubtelConfigured) {
       const code = randomInt(100000, 999999).toString();
-      const url = new URL('https://api.hubtel.com/v1/messages/send');
-      url.searchParams.set('From', this.hubtelSenderId);
-      url.searchParams.set('To', phone);
-      url.searchParams.set('Content', `Your BoaFie verification code is ${code}. It expires in 10 minutes.`);
-      url.searchParams.set('ClientId', this.hubtelClientId!);
-      url.searchParams.set('ClientSecret', this.hubtelClientSecret!);
+      const url = new URL('https://smsc.hubtel.com/v1/messages/send');
+      url.searchParams.set('from', this.hubtelSenderId);
+      url.searchParams.set('to', phone);
+      url.searchParams.set('content', `Your BoaFie verification code is ${code}. It expires in 10 minutes.`);
+      url.searchParams.set('clientid', this.hubtelClientId!);
+      url.searchParams.set('clientsecret', this.hubtelClientSecret!);
 
       const res = await fetch(url, { method: 'GET' });
       if (!res.ok) {
